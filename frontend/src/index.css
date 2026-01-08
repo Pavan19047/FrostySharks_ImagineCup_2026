@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  @apply font-grotesk bg-slate-950 text-slate-50 antialiased;
+}
+
+.card {
+  @apply bg-slate-900/70 border border-slate-800 rounded-2xl shadow-xl backdrop-blur-sm;
+}
+
+.input {
+  @apply w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-primary focus:outline-none;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-primary to-secondary px-4 py-2 font-semibold text-slate-900 hover:shadow-lg hover:shadow-primary/30 transition;
+}
+
+.badge {
+  @apply inline-flex items-center gap-1 rounded-full bg-slate-800 px-3 py-1 text-xs uppercase tracking-wide text-slate-200;
+}
