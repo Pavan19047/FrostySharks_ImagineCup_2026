@@ -29,7 +29,24 @@ if (config.app.allowLogging) {
 }
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', app: 'NyayaSaathi' });
+  res.json({ 
+    status: 'ok', 
+    app: 'NyayaSaathi',
+    aiProvider: config.aiProvider,
+    ollamaUrl: config.ollama.url,
+    ollamaModel: config.ollama.model
+  });
+});
+
+// Test endpoint to verify Ollama connectivity
+app.get('/test-ollama', async (_req, res) => {
+  try {
+    const { generateResponse } = require('./services/aiProvider');
+    const testResponse = await generateResponse('Return JSON: {"test": "success", "confidence": 0.9}');
+    res.json({ status: 'ok', rawResponse: testResponse.substring(0, 500) });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
 });
 
 app.post('/chat', async (req, res) => {

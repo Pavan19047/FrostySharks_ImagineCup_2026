@@ -6,6 +6,7 @@ import JourneyTracker from './components/JourneyTracker';
 import ConfidenceMeter from './components/ConfidenceMeter';
 import DocumentSection from './components/DocumentSection';
 import AboutSection from './components/AboutSection';
+import SystemStatus from './components/SystemStatus';
 import { sendChat, explainRights, generateDocument } from './services/api';
 
 function b64ToUrl(base64, type) {
@@ -57,19 +58,29 @@ export default function App() {
     setIsLoadingChat(true);
     try {
       const data = await sendChat({ message: text, history: historyForApi, language, safeMode });
+      if (!data || !data.reply) {
+        throw new Error('Invalid response from AI');
+      }
       const aiMsg = {
         sender: 'ai',
         text: data.reply,
         meta: { issueType: data.issueType }
       };
       setMessages((prev) => [...prev, aiMsg]);
-      setFollowUps(data.followUps || []);
+      setFollowUps(Array.isArray(data.followUps) ? data.followUps : []);
       setAiConfidence(data.confidence || 0.45);
-      setNextSteps(data.nextSteps || []);
-      setRightsSummary(data.rightsSummary || []);
-      setJourney((prev) => ({ ...prev, issue: true, next: Boolean((data.nextSteps || []).length) }));
+      setNextSteps(Array.isArray(data.nextSteps) ? data.nextSteps : []);
+      setRightsSummary(Array.isArray(data.rightsSummary) ? data.rightsSummary : []);
+      setJourney((prev) => ({ 
+        ...prev, 
+        issue: true, 
+        next: Boolean((data.nextSteps || []).length) 
+      }));
     } catch (e) {
-      setError('Failed to contact AI. Check backend and env.');
+      console.error('Chat error:', e);
+      setError(`Failed to contact AI: ${e.message}. Check backend and ensure Ollama is running.`);
+      // Remove the user message if AI failed
+      setMessages((prev) => prev.slice(0, -1));
     } finally {
       setIsLoadingChat(false);
     }
@@ -77,32 +88,48 @@ export default function App() {
 
   const handleExplainRights = async () => {
     setError('');
+    if (!messages.length || messages.length <= 1) {
+      setError('Please describe your issue first before requesting rights explanation.');
+      return;
+    }
+    setIsLoadingChat(true);
     try {
       const data = await explainRights({ message: 'Explain my rights for the current issue', history: historyForApi, language });
       if (data?.rights) {
-        setRightsSummary(Array.isArray(data.rights) ? data.rights : [data.rights]);
+        const rightsArray = Array.isArray(data.rights) ? data.rights : [data.rights];
+        setRightsSummary(rightsArray);
+        setAiConfidence(data?.confidence || aiConfidence);
+        setJourney((prev) => ({ ...prev, rights: true }));
+        setMessages((prev) => [
+          ...prev,
+          {
+            sender: 'ai',
+            text: `${rightsArray.join('\n\n')}\n\nDisclaimer: ${data.disclaimer || 'This is guidance, not legal advice.'}`
+          }
+        ]);
       }
-      setAiConfidence(data?.confidence || aiConfidence);
-      setJourney((prev) => ({ ...prev, rights: true }));
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: 'ai',
-          text: `${Array.isArray(data.rights) ? data.rights.join('\n') : data.rights}`
-        }
-      ]);
     } catch (e) {
-      setError('Unable to explain rights right now.');
+      console.error('Rights error:', e);
+      setError(`Unable to explain rights: ${e.message || 'Unknown error'}`);
+    } finally {
+      setIsLoadingChat(false);
     }
   };
 
   const handleFollowUp = (q) => handleSend(q);
 
   const handleGenerate = async (type) => {
+    if (messages.length <= 1) {
+      setError('Please have a conversation first before generating documents.');
+      return;
+    }
     setLoadingDoc(type);
     setError('');
     try {
       const res = await generateDocument({ type, history: historyForApi, details: { language, confidence: aiConfidence } });
+      if (!res.pdf || !res.doc || !res.draft) {
+        throw new Error('Invalid response from server');
+      }
       const pdfUrl = b64ToUrl(res.pdf.data, 'application/pdf');
       const docUrl = b64ToUrl(res.doc.data, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       setDownloadUrls((prev) => ({ ...prev, [type]: { pdf: pdfUrl, doc: docUrl } }));
@@ -116,7 +143,8 @@ export default function App() {
       }));
       setJourney((prev) => ({ ...prev, document: true }));
     } catch (e) {
-      setError('Document generation failed.');
+      console.error('Document generation error:', e);
+      setError(`Document generation failed: ${e.message || 'Unknown error'}`);
     } finally {
       setLoadingDoc(null);
     }
@@ -126,6 +154,8 @@ export default function App() {
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 text-slate-50">
       <Header onToggleTheme={() => setThemeDark((v) => !v)} isDark={themeDark} />
       <Hero onStart={() => document.getElementById('chat')?.scrollIntoView({ behavior: 'smooth' })} />
+
+      <SystemStatus />
 
       {error && (
         <div className="max-w-6xl mx-auto px-4 pb-4">
